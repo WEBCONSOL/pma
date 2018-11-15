@@ -876,7 +876,7 @@ class DatabaseInterface
                                            AS SCHEMA_DATA_FREE';
             }
             $sql .= '
-                   FROM `information_schema`.SCHEMATA s';
+                   FROM `information_schema`.SCHEMATA s ';
             if ($force_stats) {
                 $sql .= '
                     LEFT JOIN `information_schema`.TABLES t
@@ -1533,6 +1533,11 @@ class DatabaseInterface
     {
         // If Zero configuration mode enabled, check PMA tables in current db.
         if ($GLOBALS['cfg']['ZeroConf'] == true) {
+            /**
+             * the DatabaseList class as a stub for the ListDatabase class
+             */
+            $GLOBALS['dblist'] = new DatabaseList();
+
             if (strlen($GLOBALS['db'])) {
                 $cfgRelation = $this->relation->getRelationsParam();
                 if (empty($cfgRelation['db'])) {

@@ -1941,6 +1941,8 @@ EOT;
             || $updatableView)
             && $just_one_table;
 
+        $_SESSION['tmpval']['possible_as_geometry'] = $editable;
+
         $displayParts = array(
             'edit_lnk' => $displayResultsObject::UPDATE_ROW,
             'del_lnk' => $displayResultsObject::DELETE_ROW,
@@ -2255,7 +2257,7 @@ EOT;
         Util::handleDisableFKCheckCleanup($default_fk_check);
 
         foreach ($warning_messages as $warning) {
-            $message = Message::notice($warning);
+            $message = Message::notice(Message::sanitize($warning));
             $html_output .= $message->getDisplay();
         }
 

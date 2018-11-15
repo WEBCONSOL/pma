@@ -33,7 +33,7 @@
                 {% set attribute = 'on update CURRENT_TIMESTAMP' %}
             {% endif %}
 
-            {% if row['Default'] is not defined %}
+            {% if row['Default'] is null %}
                 {% if row['Null'] == 'YES' %}
                     {% set row = row|merge({'Default': '<em>NULL</em>'}) %}
                 {% endif %}
@@ -54,7 +54,7 @@
                         {{- field_name|raw -}}
                     </span>
                 {%- endset %}
-                {% set comments = comments_map[row['Field']]|e %}
+                {% set comments = comments_map[row['Field']] %}
             {% endif %}
 
             {% if primary and primary.hasColumn(field_name) %}
@@ -64,7 +64,7 @@
             {% endif %}
             {% if field_name in columns_with_index %}
                 {% set displayed_field_name = displayed_field_name ~ Util_getImage(
-                    'b_key', 'Index'|trans
+                    'bd_primary', 'Index'|trans
                 ) %}
             {% endif %}
         <tr>
