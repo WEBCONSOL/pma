@@ -1,0 +1,10 @@
+.DS_Store
+.idea
+*.iml
+*.log
+config.inc.php
+logs/apache/*.log
+logs/php/*.log
+/nbproject/*
+tmp/php/session/*
+tmp/twig
