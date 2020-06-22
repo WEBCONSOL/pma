@@ -61,16 +61,16 @@ class UserPassword
         $error = false;
         $message = Message::success(__('The profile has been updated.'));
 
-        if (($_REQUEST['nopass'] != '1')) {
-            if (strlen($_REQUEST['pma_pw']) === 0 || strlen($_REQUEST['pma_pw2']) === 0) {
+        if (($_POST['nopass'] != '1')) {
+            if (strlen($_POST['pma_pw']) === 0 || strlen($_POST['pma_pw2']) === 0) {
                 $message = Message::error(__('The password is empty!'));
                 $error = true;
-            } elseif ($_REQUEST['pma_pw'] !== $_REQUEST['pma_pw2']) {
+            } elseif ($_POST['pma_pw'] !== $_POST['pma_pw2']) {
                 $message = Message::error(
                     __('The passwords aren\'t the same!')
                 );
                 $error = true;
-            } elseif (strlen($_REQUEST['pma_pw']) > 256) {
+            } elseif (strlen($_POST['pma_pw']) > 256) {
                 $message = Message::error(__('Password is too long!'));
                 $error = true;
             }
@@ -98,10 +98,10 @@ class UserPassword
         $serverType = Util::getServerType();
         $serverVersion = $GLOBALS['dbi']->getVersion();
 
-        if (isset($_REQUEST['authentication_plugin'])
-            && ! empty($_REQUEST['authentication_plugin'])
+        if (isset($_POST['authentication_plugin'])
+            && ! empty($_POST['authentication_plugin'])
         ) {
-            $orig_auth_plugin = $_REQUEST['authentication_plugin'];
+            $orig_auth_plugin = $_POST['authentication_plugin'];
         } else {
             $orig_auth_plugin = Privileges::getCurrentAuthenticationPlugin(
                 'change', $username, $hostname
@@ -114,7 +114,8 @@ class UserPassword
         if ($serverType == 'MySQL'
             && $serverVersion >= 50706
         ) {
-            $sql_query = 'ALTER USER \'' . $username . '\'@\'' . $hostname
+            $sql_query = 'ALTER USER \'' . $GLOBALS['dbi']->escapeString($username)
+                . '\'@\'' . $GLOBALS['dbi']->escapeString($hostname)
                 . '\' IDENTIFIED WITH ' . $orig_auth_plugin . ' BY '
                 . (($password == '') ? '\'\'' : '\'***\'');
         } elseif (($serverType == 'MySQL'
@@ -152,7 +153,7 @@ class UserPassword
     private function changePassHashingFunction()
     {
         if (Core::isValid(
-            $_REQUEST['authentication_plugin'], 'identical', 'mysql_old_password'
+            $_POST['authentication_plugin'], 'identical', 'mysql_old_password'
         )) {
             $hashing_function = 'OLD_PASSWORD';
         } else {
@@ -182,7 +183,8 @@ class UserPassword
         $serverVersion = $GLOBALS['dbi']->getVersion();
 
         if ($serverType == 'MySQL' && $serverVersion >= 50706) {
-            $local_query = 'ALTER USER \'' . $username . '\'@\'' . $hostname . '\''
+            $local_query = 'ALTER USER \'' . $GLOBALS['dbi']->escapeString($username)
+                . '\'@\'' . $GLOBALS['dbi']->escapeString($hostname) . '\''
                 . ' IDENTIFIED with ' . $orig_auth_plugin . ' BY '
                 . (($password == '')
                 ? '\'\''
@@ -208,8 +210,8 @@ class UserPassword
                 . " `authentication_string` = '" . $hashedPassword
                 . "', `Password` = '', "
                 . " `plugin` = '" . $orig_auth_plugin . "'"
-                . " WHERE `User` = '" . $username . "' AND Host = '"
-                . $hostname . "';";
+                . " WHERE `User` = '" . $GLOBALS['dbi']->escapeString($username)
+                . "' AND Host = '" . $GLOBALS['dbi']->escapeString($hostname) . "';";
         } else {
             $local_query = 'SET password = ' . (($password == '')
                 ? '\'\''

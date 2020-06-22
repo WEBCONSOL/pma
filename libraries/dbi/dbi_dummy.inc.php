@@ -260,7 +260,7 @@ $GLOBALS['dummy_queries'] = array(
     ),
     array(
         'query'  => 'SELECT `TABLE_NAME` FROM `INFORMATION_SCHEMA`.`TABLES`'
-            . ' WHERE `TABLE_SCHEMA`=\'pma_test\' AND `TABLE_TYPE`=\'BASE TABLE\'',
+            . ' WHERE `TABLE_SCHEMA`=\'pma_test\' AND `TABLE_TYPE` IN (\'BASE TABLE\', \'SYSTEM VERSIONED\')',
         'result' => array(),
     ),
     array(
@@ -706,7 +706,7 @@ $GLOBALS['dummy_queries'] = array(
         ),
     ),
     array(
-        'query'  => "SHOW FULL TABLES FROM `default` WHERE `Table_type`='BASE TABLE'",
+        'query'  => "SHOW FULL TABLES FROM `default` WHERE `Table_type`IN('BASE TABLE', 'SYSTEM VERSIONED')",
         'result' => array(
             array("test1", "BASE TABLE"),
             array("test2", "BASE TABLE"),
@@ -714,7 +714,7 @@ $GLOBALS['dummy_queries'] = array(
     ),
     array(
         'query'  => "SHOW FULL TABLES FROM `default` "
-            . "WHERE `Table_type`!='BASE TABLE'",
+            . "WHERE `Table_type`NOT IN('BASE TABLE', 'SYSTEM VERSIONED')",
         'result' => array(),
     ),
     array(
@@ -868,6 +868,17 @@ $GLOBALS['dummy_queries'] = array(
         'query' => "SELECT *, `COLUMN_NAME` AS `Field`, `COLUMN_TYPE` AS `Type`, `COLLATION_NAME` AS `Collation`, `IS_NULLABLE` AS `Null`, `COLUMN_KEY` AS `Key`, `COLUMN_DEFAULT` AS `Default`, `EXTRA` AS `Extra`, `PRIVILEGES` AS `Privileges`, `COLUMN_COMMENT` AS `Comment` FROM `information_schema`.`COLUMNS` WHERE `TABLE_SCHEMA` = 'information_schema' AND `TABLE_NAME` = 'PMA'",
         'result' => array(),
     ),
+    [
+        'query' => "SELECT TABLE_NAME, COLUMN_NAME, REFERENCED_TABLE_NAME, REFERENCED_COLUMN_NAME FROM information_schema.key_column_usage WHERE referenced_table_name IS NOT NULL AND TABLE_SCHEMA = 'test' AND TABLE_NAME IN ('table1','table2') AND REFERENCED_TABLE_NAME IN ('table1','table2');",
+        'result' => [
+            [
+                'TABLE_NAME' => 'table2',
+                'COLUMN_NAME' => 'idtable2',
+                'REFERENCED_TABLE_NAME' => 'table1',
+                'REFERENCED_COLUMN_NAME' => 'idtable1',
+            ]
+        ],
+    ],
 );
 /**
  * Current database.

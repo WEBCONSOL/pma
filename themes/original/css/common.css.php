@@ -417,6 +417,7 @@ td .icon {
 
 /* message boxes: error, confirmation */
 #pma_errors, #pma_demo, #pma_footer {
+    position: relative;
     padding: 0 0.5em;
 }
 
@@ -668,6 +669,10 @@ form.login label {
     display: inline-block;
 }
 
+li.last.database{
+    margin-bottom: 20px !important;
+}
+
 /******************************************************************************/
 /* specific elements */
 
@@ -865,6 +870,7 @@ div#tablestatistics table {
     background: white;
     font-weight:        bold;
     padding-bottom: 0.5em;
+    padding-<?php echo $left; ?>: 2.2em;
     width: 10000px;
     overflow: hidden;
 }
@@ -2112,6 +2118,10 @@ fieldset .disabled-field td {
     -webkit-box-sizing: border-box;
 }
 
+input#auto_increment_opt {
+    width: min-content;
+}
+
 #placeholder {
     position: relative;
     border: 1px solid #aaa;
@@ -2186,6 +2196,7 @@ fieldset .disabled-field td {
 }
 
 .pma_table th.draggable span,
+.sticky_columns th.draggable span,
 .pma_table tbody td span {
     display: block;
     overflow: hidden;
@@ -2423,6 +2434,10 @@ input.btn {
 
 body .ui-widget {
     font-size: 1em;
+}
+
+body #ui-datepicker-div {
+    z-index: 9999 !important;
 }
 
 .ui-dialog fieldset legend a {

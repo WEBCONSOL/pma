@@ -1183,6 +1183,8 @@ class Results
         $number_of_columns = $this->__get('fields_cnt');
 
         for ($j = 0; $j < $number_of_columns; $j++) {
+            // PHP 7.4 fix for accessing array offset on bool
+            $col_visib_current = is_array($col_visib) && isset($col_visib[$j]) ? $col_visib[$j] : null;
 
             // assign $i with the appropriate column order
             $i = $col_order ? $col_order[$j] : $j;
@@ -1207,7 +1209,7 @@ class Results
                         $sort_expression_nodirection, $i, $unsorted_sql_query,
                         $session_max_rows, $comments,
                         $sort_direction, $col_visib,
-                        $col_visib[$j]
+                        $col_visib_current
                     );
 
                 $html .= $sorted_header_html;
@@ -1221,7 +1223,7 @@ class Results
                 // Results can't be sorted
                 $html
                     .= $this->_getDraggableClassForNonSortableColumns(
-                        $col_visib, $col_visib[$j], $condition_field,
+                        $col_visib, $col_visib_current, $condition_field,
                         $fields_meta[$i], $comments
                     );
 
@@ -1344,8 +1346,8 @@ class Results
     /**
      * Prepare unsorted sql query and sort by key drop down
      *
-     * @param array  $analyzed_sql_results analyzed sql results
-     * @param string $sort_expression      sort expression
+     * @param array      $analyzed_sql_results analyzed sql results
+     * @param array|null $sort_expression      sort expression
      *
      * @return  array   two element array - $unsorted_sql_query, $drop_down_html
      *
@@ -1354,7 +1356,7 @@ class Results
      * @see     _getTableHeaders()
      */
     private function _getUnsortedSqlAndSortByKeyDropDown(
-        array $analyzed_sql_results, $sort_expression
+        array $analyzed_sql_results, array $sort_expression
     ) {
         $drop_down_html = '';
 
@@ -1389,9 +1391,9 @@ class Results
     /**
      * Prepare sort by key dropdown - html code segment
      *
-     * @param Index[] $indexes            the indexes of the table for sort criteria
-     * @param string  $sort_expression    the sort expression
-     * @param string  $unsorted_sql_query the unsorted sql query
+     * @param Index[]    $indexes            the indexes of the table for sort criteria
+     * @param array|null $sort_expression    the sort expression
+     * @param string     $unsorted_sql_query the unsorted sql query
      *
      * @return  string  $drop_down_html         html content
      *
@@ -1400,7 +1402,7 @@ class Results
      * @see     _getTableHeaders()
      */
     private function _getSortByKeyDropDown(
-        $indexes, $sort_expression, $unsorted_sql_query
+        $indexes, array $sort_expression, $unsorted_sql_query
     ) {
 
         $drop_down_html = '';
@@ -1415,7 +1417,7 @@ class Results
             . ': <select name="sql_query" class="autosubmit">' . "\n";
 
         $used_index = false;
-        $local_order = (isset($sort_expression) ? $sort_expression : '');
+        $local_order = (is_array($sort_expression) ? implode(', ',$sort_expression) : '');
 
         foreach ($indexes as $index) {
 
@@ -1854,6 +1856,7 @@ class Results
             'db'                 => $this->__get('db'),
             'table'              => $this->__get('table'),
             'sql_query'          => $single_sorted_sql_query,
+            'sql_signature'      => Core::signSqlQuery($single_sorted_sql_query),
             'session_max_rows'   => $session_max_rows,
             'is_browse_distinct' => $this->__get('is_browse_distinct'),
         );
@@ -1862,6 +1865,7 @@ class Results
             'db'                 => $this->__get('db'),
             'table'              => $this->__get('table'),
             'sql_query'          => $multi_sorted_sql_query,
+            'sql_signature'      => Core::signSqlQuery($multi_sorted_sql_query),
             'session_max_rows'   => $session_max_rows,
             'is_browse_distinct' => $this->__get('is_browse_distinct'),
         );
@@ -2893,28 +2897,29 @@ class Results
 
                     if (@file_exists($include_file)) {
 
-                        include_once $include_file;
                         $class_name = Transformations::getClassName($include_file);
-                        // todo add $plugin_manager
-                        $plugin_manager = null;
-                        $transformation_plugin = new $class_name(
-                            $plugin_manager
-                        );
+                        if (class_exists($class_name)) {
+                            // todo add $plugin_manager
+                            $plugin_manager = null;
+                            $transformation_plugin = new $class_name(
+                                $plugin_manager
+                            );
 
-                        $transform_options = Transformations::getOptions(
-                            isset(
-                                $mime_map[$orgFullColName]
+                            $transform_options = Transformations::getOptions(
+                                isset(
+                                    $mime_map[$orgFullColName]
+                                    ['transformation_options']
+                                )
+                                ? $mime_map[$orgFullColName]
                                 ['transformation_options']
-                            )
-                            ? $mime_map[$orgFullColName]
-                            ['transformation_options']
-                            : ''
-                        );
+                                : ''
+                            );
 
-                        $meta->mimetype = str_replace(
-                            '_', '/',
-                            $mime_map[$orgFullColName]['mimetype']
-                        );
+                            $meta->mimetype = str_replace(
+                                '_', '/',
+                                $mime_map[$orgFullColName]['mimetype']
+                            );
+                        }
 
                     } // end if file_exists
                 } // end if transformation is set
@@ -3626,7 +3631,7 @@ class Results
 
             $cell = $this->_getRowData(
                 'right ' . $class, $condition_field,
-                $analyzed_sql_results, $meta, $map, $column,
+                $analyzed_sql_results, $meta, $map, $column, $column,
                 $transformation_plugin, $default_function, $nowrap,
                 $where_comparison, $transform_options,
                 $is_field_truncated, ''
@@ -3703,13 +3708,14 @@ class Results
             $wktval = Util::asWKT($column);
             list(
                 $is_field_truncated,
-                $wktval,
+                $displayedColumn,
                 // skip 3rd param
             ) = $this->_getPartialText($wktval);
 
             $cell = $this->_getRowData(
                 $class, $condition_field, $analyzed_sql_results, $meta, $map,
-                $wktval, $transformation_plugin, $default_function, '',
+                $wktval, $displayedColumn, $transformation_plugin,
+                $default_function, '',
                 $where_comparison, $transform_options,
                 $is_field_truncated, ''
             );
@@ -3724,13 +3730,13 @@ class Results
             $wkbval = substr(bin2hex($column), 8);
             list(
                 $is_field_truncated,
-                $wkbval,
+                $displayedColumn,
                 // skip 3rd param
             ) = $this->_getPartialText($wkbval);
 
             $cell = $this->_getRowData(
                 $class, $condition_field,
-                $analyzed_sql_results, $meta, $map, $wkbval,
+                $analyzed_sql_results, $meta, $map, $wkbval, $displayedColumn,
                 $transformation_plugin, $default_function, '',
                 $where_comparison, $transform_options,
                 $is_field_truncated, ''
@@ -3825,6 +3831,7 @@ class Results
 
         // Cut all fields to $GLOBALS['cfg']['LimitChars']
         // (unless it's a link-type transformation or binary)
+        $displayedColumn = $column;
         if (!(gettype($transformation_plugin) === "object"
             && strpos($transformation_plugin->getName(), 'Link') !== false)
             && !stristr($field_flags, self::BINARY_FIELD)
@@ -3839,8 +3846,8 @@ class Results
         $formatted = false;
         if (isset($meta->_type) && $meta->_type === MYSQLI_TYPE_BIT) {
 
-            $column = Util::printableBitValue(
-                $column, $meta->length
+            $displayedColumn = Util::printableBitValue(
+                $displayedColumn, $meta->length
             );
 
             // some results of PROCEDURE ANALYSE() are reported as
@@ -3855,8 +3862,8 @@ class Results
             if ($meta->type === self::STRING_FIELD) {
                 $binary_or_blob = self::BINARY_FIELD;
             }
-            $column = $this->_handleNonPrintableContents(
-                $binary_or_blob, $column, $transformation_plugin,
+            $displayedColumn = $this->_handleNonPrintableContents(
+                $binary_or_blob, $displayedColumn, $transformation_plugin,
                 $transform_options, $default_function,
                 $meta, $_url_params, $is_field_truncated
             );
@@ -3875,7 +3882,7 @@ class Results
 
         if ($formatted) {
             $cell = $this->_buildValueDisplay(
-                $class, $condition_field, $column
+                $class, $condition_field, $displayedColumn
             );
             return $cell;
         }
@@ -3898,7 +3905,7 @@ class Results
 
         $cell = $this->_getRowData(
             $class, $condition_field,
-            $analyzed_sql_results, $meta, $map, $column,
+            $analyzed_sql_results, $meta, $map, $column, $displayedColumn,
             $transformation_plugin, $default_function, $nowrap,
             $where_comparison, $transform_options,
             $is_field_truncated, $original_length
@@ -3939,13 +3946,13 @@ class Results
         }
 
         // as this is a form value, the type is always string so we cannot
-        // use Core::isValid($_REQUEST['session_max_rows'], 'integer')
-        if (Core::isValid($_REQUEST['session_max_rows'], 'numeric')) {
-            $query['max_rows'] = (int)$_REQUEST['session_max_rows'];
-            unset($_REQUEST['session_max_rows']);
-        } elseif ($_REQUEST['session_max_rows'] == self::ALL_ROWS) {
+        // use Core::isValid($_POST['session_max_rows'], 'integer')
+        if (Core::isValid($_POST['session_max_rows'], 'numeric')) {
+            $query['max_rows'] = (int)$_POST['session_max_rows'];
+            unset($_POST['session_max_rows']);
+        } elseif ($_POST['session_max_rows'] == self::ALL_ROWS) {
             $query['max_rows'] = self::ALL_ROWS;
-            unset($_REQUEST['session_max_rows']);
+            unset($_POST['session_max_rows']);
         } elseif (empty($query['max_rows'])) {
             $query['max_rows'] = intval($GLOBALS['cfg']['MaxRows']);
         }
@@ -4212,13 +4219,10 @@ class Results
         // can the result be sorted?
         if ($displayParts['sort_lnk'] == '1' && ! is_null($analyzed_sql_results['statement'])) {
 
-            // At this point, $sort_expression is an array but we only verify
-            // the first element in case we could find that the table is
-            // sorted by one of the choices listed in the
-            // "Sort by key" drop-down
+            // At this point, $sort_expression is an array
             list($unsorted_sql_query, $sort_by_key_html)
                 = $this->_getUnsortedSqlAndSortByKeyDropDown(
-                    $analyzed_sql_results, $sort_expression[0]
+                    $analyzed_sql_results, $sort_expression
                 );
 
         } else {
@@ -5159,6 +5163,8 @@ class Results
         if (count($url_params) > 0
             && (!empty($tmpdb) && !empty($meta->orgtable))
         ) {
+            $url_params['where_clause_sign'] = Core::signSqlQuery($url_params['where_clause']);
+
             $result = '<a href="tbl_get_field.php'
                 . Url::getCommon($url_params)
                 . '" class="disableAjax">'
@@ -5223,6 +5229,7 @@ class Results
      *                                             field
      * @param array         $map                   the list of relations
      * @param string        $data                  data
+     * @param string        $displayedData         data that will be displayed (maybe be chunked)
      * @param object|string $transformation_plugin transformation plugin.
      *                                             Can also be the default function:
      *                                             Core::mimeDefaultFunction
@@ -5243,7 +5250,8 @@ class Results
      *
      */
     private function _getRowData(
-        $class, $condition_field, array $analyzed_sql_results, $meta, array $map, $data,
+        $class, $condition_field, array $analyzed_sql_results, $meta,
+        array $map, $data, $displayedData,
         $transformation_plugin, $default_function, $nowrap, $where_comparison,
         array $transform_options, $is_field_truncated, $original_length=''
     ) {
@@ -5315,22 +5323,25 @@ class Results
                     $title = htmlspecialchars($data);
                 }
 
+                $sqlQuery = 'SELECT * FROM '
+                . Util::backquote($map[$meta->name][3]) . '.'
+                . Util::backquote($map[$meta->name][0])
+                . ' WHERE '
+                . Util::backquote($map[$meta->name][1])
+                . $where_comparison;
+
                 $_url_params = array(
                     'db'    => $map[$meta->name][3],
                     'table' => $map[$meta->name][0],
                     'pos'   => '0',
-                    'sql_query' => 'SELECT * FROM '
-                        . Util::backquote($map[$meta->name][3]) . '.'
-                        . Util::backquote($map[$meta->name][0])
-                        . ' WHERE '
-                        . Util::backquote($map[$meta->name][1])
-                        . $where_comparison,
+                    'sql_signature' => Core::signSqlQuery($sqlQuery),
+                    'sql_query' => $sqlQuery,
                 );
 
                 if ($transformation_plugin != $default_function) {
                     // always apply a transformation on the real data,
                     // not on the display field
-                    $message = $transformation_plugin->applyTransformation(
+                    $displayedData = $transformation_plugin->applyTransformation(
                         $data,
                         $transform_options,
                         $meta
@@ -5342,10 +5353,10 @@ class Results
                     ) {
                         // user chose "relational display field" in the
                         // display options, so show display field in the cell
-                        $message = $default_function($dispval);
+                        $displayedData = $default_function($dispval);
                     } else {
                         // otherwise display data in the cell
-                        $message = $default_function($data);
+                        $displayedData = $default_function($displayedData);
                     }
 
                 }
@@ -5356,7 +5367,7 @@ class Results
                 }
                 $result .= Util::linkOrButton(
                     'sql.php' . Url::getCommon($_url_params),
-                    $message, $tag_params
+                    $displayedData, $tag_params
                 );
             }
 

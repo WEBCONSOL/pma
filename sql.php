@@ -13,6 +13,7 @@ use PhpMyAdmin\Response;
 use PhpMyAdmin\Sql;
 use PhpMyAdmin\Url;
 use PhpMyAdmin\Util;
+use PhpMyAdmin\Core;
 
 /**
  * Gets some core libraries
@@ -71,6 +72,10 @@ if (isset($_POST['bkm_fields']['bkm_sql_query'])) {
     $sql_query = $_POST['bkm_fields']['bkm_sql_query'];
 } elseif (isset($_POST['sql_query'])) {
     $sql_query = $_POST['sql_query'];
+} elseif (isset($_GET['sql_query']) && isset($_GET['sql_signature'])) {
+    if (Core::checkSqlQuerySignature($_GET['sql_query'], $_GET['sql_signature'])) {
+        $sql_query = $_GET['sql_query'];
+    }
 }
 
 // This one is just to fill $db
@@ -79,28 +84,28 @@ if (isset($_POST['bkm_fields']['bkm_database'])) {
 }
 
 // During grid edit, if we have a relational field, show the dropdown for it.
-if (isset($_REQUEST['get_relational_values'])
-    && $_REQUEST['get_relational_values'] == true
+if (isset($_POST['get_relational_values'])
+    && $_POST['get_relational_values'] == true
 ) {
     $sql->getRelationalValues($db, $table);
     // script has exited at this point
 }
 
 // Just like above, find possible values for enum fields during grid edit.
-if (isset($_REQUEST['get_enum_values']) && $_REQUEST['get_enum_values'] == true) {
+if (isset($_POST['get_enum_values']) && $_POST['get_enum_values'] == true) {
     $sql->getEnumOrSetValues($db, $table, "enum");
     // script has exited at this point
 }
 
 
 // Find possible values for set fields during grid edit.
-if (isset($_REQUEST['get_set_values']) && $_REQUEST['get_set_values'] == true) {
+if (isset($_POST['get_set_values']) && $_POST['get_set_values'] == true) {
     $sql->getEnumOrSetValues($db, $table, "set");
     // script has exited at this point
 }
 
-if (isset($_REQUEST['get_default_fk_check_value'])
-    && $_REQUEST['get_default_fk_check_value'] == true
+if (isset($_GET['get_default_fk_check_value'])
+    && $_GET['get_default_fk_check_value'] == true
 ) {
     $response = Response::getInstance();
     $response->addJSON(
@@ -112,7 +117,7 @@ if (isset($_REQUEST['get_default_fk_check_value'])
 /**
  * Check ajax request to set the column order and visibility
  */
-if (isset($_REQUEST['set_col_prefs']) && $_REQUEST['set_col_prefs'] == true) {
+if (isset($_POST['set_col_prefs']) && $_POST['set_col_prefs'] == true) {
     $sql->setColumnOrderOrVisibility($table, $db);
     // script has exited at this point
 }

@@ -170,6 +170,7 @@ class Sql
      */
     private function resultSetContainsUniqueKey($db, $table, array $fields_meta)
     {
+        $columns = $GLOBALS['dbi']->getColumns($db, $table);
         $resultSetColumnNames = array();
         foreach ($fields_meta as $oneMeta) {
             $resultSetColumnNames[] = $oneMeta->name;
@@ -180,6 +181,10 @@ class Sql
                 $numberFound = 0;
                 foreach ($indexColumns as $indexColumnName => $dummy) {
                     if (in_array($indexColumnName, $resultSetColumnNames)) {
+                        $numberFound++;
+                    } else if (!in_array($indexColumnName, $columns)) {
+                        $numberFound++;
+                    } else if (strpos($columns[$indexColumnName]['Extra'], 'INVISIBLE') !== false) {
                         $numberFound++;
                     }
                 }
@@ -219,10 +224,10 @@ class Sql
             );
 
             $dropdown = '<span class="curr_value">'
-                . htmlspecialchars($_REQUEST['curr_value'])
+                . htmlspecialchars($_POST['curr_value'])
                 . '</span>'
-                . '<a href="browse_foreigners.php'
-                . Url::getCommon($_url_params) . '"'
+                . '<a href="browse_foreigners.php" data-post="'
+                . Url::getCommon($_url_params, '') . '"'
                 . 'class="ajax browse_foreign" ' . '>'
                 . __('Browse foreign values')
                 . '</a>';
@@ -471,9 +476,9 @@ EOT;
         $values = $this->getValuesForColumn($db, $table, $column);
         $dropdown = '';
         $full_values =
-            isset($_REQUEST['get_full_values']) ? $_REQUEST['get_full_values'] : false;
+            isset($_POST['get_full_values']) ? $_POST['get_full_values'] : false;
         $where_clause =
-            isset($_REQUEST['where_clause']) ? $_REQUEST['where_clause'] : null;
+            isset($_POST['where_clause']) ? $_POST['where_clause'] : null;
 
         // If the $curr_value was truncated, we should
         // fetch the correct full values from the table
@@ -744,7 +749,7 @@ EOT;
      */
     private function setColumnProperty($pmatable, $request_index)
     {
-        $property_value = array_map('intval', explode(',', $_REQUEST[$request_index]));
+        $property_value = array_map('intval', explode(',', $_POST[$request_index]));
         switch($request_index) {
         case 'col_order':
             $property_to_set = Table::PROP_COLUMN_ORDER;
@@ -758,7 +763,7 @@ EOT;
         $retval = $pmatable->setUiProp(
             $property_to_set,
             $property_value,
-            $_REQUEST['table_create_time']
+            isset($_POST['table_create_time']) ? $_POST['table_create_time'] : null
         );
         if (gettype($retval) != 'boolean') {
             $response = Response::getInstance();
@@ -784,12 +789,12 @@ EOT;
         $retval = false;
 
         // set column order
-        if (isset($_REQUEST['col_order'])) {
+        if (isset($_POST['col_order'])) {
             $retval = $this->setColumnProperty($pmatable, 'col_order');
         }
 
         // set column visibility
-        if ($retval === true && isset($_REQUEST['col_visib'])) {
+        if ($retval === true && isset($_POST['col_visib'])) {
             $retval = $this->setColumnProperty($pmatable, 'col_visib');
         }
 
@@ -866,14 +871,14 @@ EOT;
      */
     public function getRelationalValues($db, $table)
     {
-        $column = $_REQUEST['column'];
+        $column = $_POST['column'];
         if ($_SESSION['tmpval']['relational_display'] == 'D'
-            && isset($_REQUEST['relation_key_or_display_column'])
-            && $_REQUEST['relation_key_or_display_column']
+            && isset($_POST['relation_key_or_display_column'])
+            && $_POST['relation_key_or_display_column']
         ) {
-            $curr_value = $_REQUEST['relation_key_or_display_column'];
+            $curr_value = $_POST['relation_key_or_display_column'];
         } else {
-            $curr_value = $_REQUEST['curr_value'];
+            $curr_value = $_POST['curr_value'];
         }
         $dropdown = $this->getHtmlForRelationalColumnDropdown(
             $db, $table, $column, $curr_value
@@ -894,8 +899,8 @@ EOT;
      */
     public function getEnumOrSetValues($db, $table, $columnType)
     {
-        $column = $_REQUEST['column'];
-        $curr_value = $_REQUEST['curr_value'];
+        $column = $_POST['column'];
+        $curr_value = $_POST['curr_value'];
         $response = Response::getInstance();
         if ($columnType == "enum") {
             $dropdown = $this->getHtmlForEnumColumnDropdown(
@@ -1161,6 +1166,11 @@ EOT;
             // "Showing rows..." message
             // $_SESSION['tmpval']['max_rows'] = 'all';
             $unlim_num_rows = $num_rows;
+        } elseif ($this->isAppendLimitClause($analyzed_sql_results) && $_SESSION['tmpval']['max_rows'] > $num_rows) {
+            // When user has not defined a limit in query and total rows in
+            // result are less than max_rows to display, there is no need
+            // to count total rows for that query again
+            $unlim_num_rows = $_SESSION['tmpval']['pos'] + $num_rows;
         } elseif ($analyzed_sql_results['querytype'] == 'SELECT'
             || $analyzed_sql_results['is_subquery']
         ) {
@@ -1309,11 +1319,11 @@ EOT;
             $this->cleanupRelations(
                 isset($db) ? $db : '',
                 isset($table) ? $table : '',
-                isset($_REQUEST['dropped_column']) ? $_REQUEST['dropped_column'] : null,
-                isset($_REQUEST['purge']) ? $_REQUEST['purge'] : null
+                isset($_POST['dropped_column']) ? $_POST['dropped_column'] : null,
+                isset($_POST['purge']) ? $_POST['purge'] : null
             );
 
-            if (isset($_REQUEST['dropped_column'])
+            if (isset($_POST['dropped_column'])
                 && strlen($db) > 0
                 && strlen($table) > 0
             ) {
@@ -1429,7 +1439,7 @@ EOT;
         }
 
         // In case of ROLLBACK, notify the user.
-        if (isset($_REQUEST['rollback_query'])) {
+        if (isset($_POST['rollback_query'])) {
             $message->addText(__('[ROLLBACK occurred.]'));
         }
 
@@ -1455,6 +1465,7 @@ EOT;
      * @param DisplayResults $displayResultsObject DisplayResult instance
      * @param array          $extra_data           extra data
      * @param string         $pmaThemeImage        uri of the theme image
+     * @param array|null     $profiling_results    profiling results
      * @param object         $result               executed query results
      * @param string         $sql_query            sql query
      * @param string         $complete_query       complete sql query
@@ -1463,7 +1474,7 @@ EOT;
      */
     private function getQueryResponseForNoResultsReturned(array $analyzed_sql_results, $db,
         $table, $message_to_show, $num_rows, $displayResultsObject, $extra_data,
-        $pmaThemeImage, $result, $sql_query, $complete_query
+        $pmaThemeImage, $profiling_results, $result, $sql_query, $complete_query
     ) {
         if ($this->isDeleteTransformationInfo($analyzed_sql_results)) {
             $this->deleteTransformationInfo($db, $table, $analyzed_sql_results);
@@ -1521,6 +1532,17 @@ EOT;
                     false, 0, $num_rows, true, $result,
                     $analyzed_sql_results, true
                 );
+
+                if (isset($profiling_results)) {
+                    $header   = $response->getHeader();
+                    $scripts  = $header->getScripts();
+                    $scripts->addFile('sql.js');
+                    $html_output .= $this->getHtmlForProfilingChart(
+                        $url_query,
+                        $db,
+                        isset($profiling_results) ? $profiling_results : []
+                    );
+                }
 
                 $html_output .= $displayResultsObject->getCreateViewQueryResultOp(
                     $analyzed_sql_results
@@ -1639,9 +1661,9 @@ EOT;
         $editable, $unlim_num_rows, $num_rows, $showtable, $result,
         array $analyzed_sql_results, $is_limited_display = false
     ) {
-        $printview = isset($_REQUEST['printview']) && $_REQUEST['printview'] == '1' ? '1' : null;
+        $printview = isset($_POST['printview']) && $_POST['printview'] == '1' ? '1' : null;
         $table_html = '';
-        $browse_dist = ! empty($_REQUEST['is_browse_distinct']);
+        $browse_dist = ! empty($_POST['is_browse_distinct']);
 
         if ($analyzed_sql_results['is_procedure']) {
 
@@ -1706,10 +1728,11 @@ EOT;
             } while ($GLOBALS['dbi']->moreResults() && $GLOBALS['dbi']->nextResult());
 
         } else {
-            if (isset($result) && $result !== false) {
+            $fields_meta = array();
+            if (isset($result) && ! is_bool($result)) {
                 $fields_meta = $GLOBALS['dbi']->getFieldsMeta($result);
-                $fields_cnt  = count($fields_meta);
             }
+            $fields_cnt = count($fields_meta);
             $_SESSION['is_multi_query'] = false;
             $displayResultsObject->setProperties(
                 $unlim_num_rows,
@@ -1731,12 +1754,14 @@ EOT;
                 $browse_dist
             );
 
-            $table_html .= $displayResultsObject->getTable(
-                $result,
-                $displayParts,
-                $analyzed_sql_results,
-                $is_limited_display
-            );
+            if (! is_bool($result)) {
+                $table_html .= $displayResultsObject->getTable(
+                    $result,
+                    $displayParts,
+                    $analyzed_sql_results,
+                    $is_limited_display
+                );
+            }
             $GLOBALS['dbi']->freeResult($result);
         }
 
@@ -1887,7 +1912,7 @@ EOT;
     ) {
         // If we are retrieving the full value of a truncated field or the original
         // value of a transformed field, show it here
-        if (isset($_REQUEST['grid_edit']) && $_REQUEST['grid_edit'] == true) {
+        if (isset($_POST['grid_edit']) && $_POST['grid_edit'] == true) {
             $this->sendResponseForGridEdit($result);
             // script has exited at this point
         }
@@ -1965,7 +1990,7 @@ EOT;
             );
 
         }
-        if (isset($_REQUEST['printview']) && $_REQUEST['printview'] == '1') {
+        if (isset($_POST['printview']) && $_POST['printview'] == '1') {
             $displayParts = array(
                 'edit_lnk' => $displayResultsObject::NO_EDIT_OR_DELETE,
                 'del_lnk' => $displayResultsObject::NO_EDIT_OR_DELETE,
@@ -1977,7 +2002,7 @@ EOT;
             );
         }
 
-        if (isset($_REQUEST['table_maintenance'])) {
+        if (isset($_POST['table_maintenance'])) {
             $scripts->addFile('makegrid.js');
             $scripts->addFile('sql.js');
             $table_maintenance_html = '';
@@ -1999,7 +2024,7 @@ EOT;
             }
         }
 
-        if (!isset($_REQUEST['printview']) || $_REQUEST['printview'] != '1') {
+        if (!isset($_POST['printview']) || $_POST['printview'] != '1') {
             $scripts->addFile('makegrid.js');
             $scripts->addFile('sql.js');
             unset($GLOBALS['message']);
@@ -2177,7 +2202,7 @@ EOT;
         if (! empty($analyzed_sql_results)
             && $this->isRememberSortingOrder($analyzed_sql_results)
             && empty($analyzed_sql_results['union'])
-            && ! isset($_REQUEST['sort_by_key'])
+            && ! isset($_POST['sort_by_key'])
         ) {
             if (! isset($_SESSION['sql_from_query_box'])) {
                 $this->handleSortOrder($db, $table, $analyzed_sql_results, $sql_query);
@@ -2216,6 +2241,10 @@ EOT;
                 isset($extra_data) ? $extra_data : null
             );
 
+        if ($GLOBALS['dbi']->moreResults()) {
+            $GLOBALS['dbi']->nextResult();
+        }
+
         $operations = new Operations();
         $warning_messages = $operations->getWarningMessagesArray();
 
@@ -2227,7 +2256,7 @@ EOT;
                 $analyzed_sql_results, $db, $table,
                 isset($message_to_show) ? $message_to_show : null,
                 $num_rows, $displayResultsObject, $extra_data,
-                $pmaThemeImage, isset($result) ? $result : null,
+                $pmaThemeImage, $profiling_results, isset($result) ? $result : null,
                 $sql_query, isset($complete_query) ? $complete_query : null
             );
         } else {

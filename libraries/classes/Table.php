@@ -510,82 +510,100 @@ class Table
             }
         }
 
+        // if column is virtual, check if server type is Mysql as only Mysql server
+        // supports extra column properties
+        $isVirtualColMysql = $virtuality && in_array(Util::getServerType(), array('MySQL', 'Percona Server'));
+        // if column is virtual, check if server type is MariaDB as MariaDB server
+        // supports no extra virtual column properties except CHARACTER SET for text column types
+        $isVirtualColMariaDB = $virtuality && Util::getServerType() === 'MariaDB';
+
+        $matches = preg_match(
+            '@^(TINYTEXT|TEXT|MEDIUMTEXT|LONGTEXT|VARCHAR|CHAR|ENUM|SET)$@i',
+            $type
+        );
+        if (! empty($collation) && $collation != 'NULL' && $matches) {
+            $query .= Util::getCharsetQueryPart(
+                $isVirtualColMariaDB ? preg_replace('~_.+~s', '', $collation) : $collation,
+                true
+            );
+        }
+
         if ($virtuality) {
             $query .= ' AS (' . $expression . ') ' . $virtuality;
-        } else {
+        }
 
-            $matches = preg_match(
-                '@^(TINYTEXT|TEXT|MEDIUMTEXT|LONGTEXT|VARCHAR|CHAR|ENUM|SET)$@i',
-                $type
-            );
-            if (! empty($collation) && $collation != 'NULL' && $matches) {
-                $query .= Util::getCharsetQueryPart($collation, true);
-            }
-
+        if (! $virtuality || $isVirtualColMysql) {
             if ($null !== false) {
-                if ($null == 'NULL') {
+                if ($null == 'YES') {
                     $query .= ' NULL';
                 } else {
                     $query .= ' NOT NULL';
                 }
             }
 
-            switch ($default_type) {
-            case 'USER_DEFINED' :
-                if ($is_timestamp && $default_value === '0') {
-                    // a TIMESTAMP does not accept DEFAULT '0'
-                    // but DEFAULT 0 works
-                    $query .= ' DEFAULT 0';
-                } elseif ($type == 'BIT') {
-                    $query .= ' DEFAULT b\''
-                        . preg_replace('/[^01]/', '0', $default_value)
-                        . '\'';
-                } elseif ($type == 'BOOLEAN') {
-                    if (preg_match('/^1|T|TRUE|YES$/i', $default_value)) {
-                        $query .= ' DEFAULT TRUE';
-                    } elseif (preg_match('/^0|F|FALSE|NO$/i', $default_value)) {
-                        $query .= ' DEFAULT FALSE';
+            if (! $virtuality) {
+                switch ($default_type) {
+                case 'USER_DEFINED' :
+                    if ($is_timestamp && $default_value === '0') {
+                        // a TIMESTAMP does not accept DEFAULT '0'
+                        // but DEFAULT 0 works
+                        $query .= ' DEFAULT 0';
+                    } elseif ($type == 'BIT') {
+                        $query .= ' DEFAULT b\''
+                            . preg_replace('/[^01]/', '0', $default_value)
+                            . '\'';
+                    } elseif ($type == 'BOOLEAN') {
+                        if (preg_match('/^1|T|TRUE|YES$/i', $default_value)) {
+                            $query .= ' DEFAULT TRUE';
+                        } elseif (preg_match('/^0|F|FALSE|NO$/i', $default_value)) {
+                            $query .= ' DEFAULT FALSE';
+                        } else {
+                            // Invalid BOOLEAN value
+                            $query .= ' DEFAULT \''
+                                . $GLOBALS['dbi']->escapeString($default_value) . '\'';
+                        }
+                    } elseif ($type == 'BINARY' || $type == 'VARBINARY') {
+                        $query .= ' DEFAULT 0x' . $default_value;
                     } else {
-                        // Invalid BOOLEAN value
                         $query .= ' DEFAULT \''
                             . $GLOBALS['dbi']->escapeString($default_value) . '\'';
                     }
-                } elseif ($type == 'BINARY' || $type == 'VARBINARY') {
-                    $query .= ' DEFAULT 0x' . $default_value;
-                } else {
-                    $query .= ' DEFAULT \''
-                        . $GLOBALS['dbi']->escapeString($default_value) . '\'';
-                }
-                break;
-            /** @noinspection PhpMissingBreakStatementInspection */
-            case 'NULL' :
-                // If user uncheck null checkbox and not change default value null,
-                // default value will be ignored.
-                if ($null !== false && $null !== 'NULL') {
+                    break;
+                /** @noinspection PhpMissingBreakStatementInspection */
+                case 'NULL' :
+                    // If user uncheck null checkbox and not change default value null,
+                    // default value will be ignored.
+                    if ($null !== false && $null !== 'YES') {
+                        break;
+                    }
+                    // else fall-through intended, no break here
+                case 'CURRENT_TIMESTAMP' :
+                case 'current_timestamp()':
+                    $query .= ' DEFAULT ' . $default_type;
+
+                    if (strlen($length) !== 0
+                        && $length !== 0
+                        && $is_timestamp
+                        && $default_type !== 'NULL' // Not to be added in case of NULL
+                    ) {
+                        $query .= '(' . $length . ')';
+                    }
+                    break;
+                case 'NONE' :
+                default :
                     break;
                 }
-                // else fall-through intended, no break here
-            case 'CURRENT_TIMESTAMP' :
-            case 'current_timestamp()':
-                $query .= ' DEFAULT ' . $default_type;
-
-                if (strlen($length) !== 0
-                    && $length !== 0
-                    && $is_timestamp
-                    && $default_type !== 'NULL' // Not to be added in case of NULL
-                ) {
-                    $query .= '(' . $length . ')';
-                }
-                break;
-            case 'NONE' :
-            default :
-                break;
             }
 
             if (!empty($extra)) {
+                if ($virtuality) {
+                    $extra = trim(preg_replace('~^\s*AUTO_INCREMENT\s*~is', ' ', $extra));
+                }
+
                 $query .= ' ' . $extra;
             }
         }
+
         if (!empty($comment)) {
             $query .= " COMMENT '" . $GLOBALS['dbi']->escapeString($comment) . "'";
         }
@@ -986,8 +1004,8 @@ class Table
             // Phase 1: Dropping existent element of the same name (if exists
             // and required).
 
-            if (isset($_REQUEST['drop_if_exists'])
-                && $_REQUEST['drop_if_exists'] == 'true'
+            if (isset($_POST['drop_if_exists'])
+                && $_POST['drop_if_exists'] == 'true'
             ) {
 
                 /**
@@ -1251,7 +1269,7 @@ class Table
                     . ') ' . ' VALUES(' . '\'' . $GLOBALS['dbi']->escapeString($target_db)
                     . '\',\'' . $GLOBALS['dbi']->escapeString($target_table) . '\',\''
                     . $GLOBALS['dbi']->escapeString($comments_copy_row['column_name'])
-                    . '\',\'' . $GLOBALS['dbi']->escapeString($target_table) . '\',\''
+                    . '\',\''
                     . $GLOBALS['dbi']->escapeString($comments_copy_row['comment'])
                     . '\''
                     . ($GLOBALS['cfgRelation']['mimework']
@@ -1685,7 +1703,10 @@ class Table
                     $value = Util::backquote($value);
                 }
 
-                if (strpos($column['Extra'], 'GENERATED') === false && strpos($column['Extra'], 'VIRTUAL') === false) {
+                if ((
+                    strpos($column['Extra'], 'GENERATED') === false
+                    && strpos($column['Extra'], 'VIRTUAL') === false
+                    ) || $column['Extra'] === 'DEFAULT_GENERATED') {
                     array_push($ret, $value);
                 }
             }
@@ -1840,7 +1861,7 @@ class Table
                 return false;
             }
 
-            if (!isset($_REQUEST['discard_remembered_sort'])) {
+            if (!isset($_POST['discard_remembered_sort'])) {
                 // check if the column name exists in this table
                 $tmp = explode(' ', $this->uiprefs[$property]);
                 $colname = $tmp[0];
@@ -2044,13 +2065,13 @@ class Table
         );
 
         // Drops the old index
-        if (! empty($_REQUEST['old_index'])) {
-            if ($_REQUEST['old_index'] == 'PRIMARY') {
+        if (! empty($_POST['old_index'])) {
+            if ($_POST['old_index'] == 'PRIMARY') {
                 $sql_query .= ' DROP PRIMARY KEY,';
             } else {
                 $sql_query .= sprintf(
                     ' DROP INDEX %s,',
-                    Util::backquote($_REQUEST['old_index'])
+                    Util::backquote($_POST['old_index'])
                 );
             }
         } // end if
@@ -2103,7 +2124,7 @@ class Table
         $keyBlockSizes = $index->getKeyBlockSize();
         if (! empty($keyBlockSizes)) {
             $sql_query .= sprintf(
-                ' KEY_BLOCK_SIZE = ',
+                ' KEY_BLOCK_SIZE = %s',
                 $GLOBALS['dbi']->escapeString($keyBlockSizes)
             );
         }
@@ -2339,9 +2360,9 @@ class Table
                         || $existrel_foreign[$master_field_md5]['ref_table_name'] != $foreign_table
                         || $existrel_foreign[$master_field_md5]['ref_index_list'] != $foreign_field
                         || $existrel_foreign[$master_field_md5]['index_list'] != $master_field
-                        || $_REQUEST['constraint_name'][$master_field_md5] != $constraint_name
-                        || ($_REQUEST['on_delete'][$master_field_md5] != $on_delete)
-                        || ($_REQUEST['on_update'][$master_field_md5] != $on_update)
+                        || $_POST['constraint_name'][$master_field_md5] != $constraint_name
+                        || ($_POST['on_delete'][$master_field_md5] != $on_delete)
+                        || ($_POST['on_update'][$master_field_md5] != $on_update)
                     ) {
                         // another foreign key is already defined for this field
                         // or an option has been changed for ON DELETE or ON UPDATE
@@ -2365,7 +2386,7 @@ class Table
                     )
                     . ';';
 
-                if (! isset($_REQUEST['preview_sql'])) {
+                if (! isset($_POST['preview_sql'])) {
                     $display_query .= $drop_query . "\n";
                     $this->_dbi->tryQuery($drop_query);
                     $tmp_error_drop = $this->_dbi->getError();
@@ -2388,12 +2409,12 @@ class Table
 
             $create_query = $this->_getSQLToCreateForeignKey(
                 $table, $master_field, $foreign_db, $foreign_table, $foreign_field,
-                $_REQUEST['constraint_name'][$master_field_md5],
-                $options_array[$_REQUEST['on_delete'][$master_field_md5]],
-                $options_array[$_REQUEST['on_update'][$master_field_md5]]
+                $_POST['constraint_name'][$master_field_md5],
+                $options_array[$_POST['on_delete'][$master_field_md5]],
+                $options_array[$_POST['on_update'][$master_field_md5]]
             );
 
-            if (! isset($_REQUEST['preview_sql'])) {
+            if (! isset($_POST['preview_sql'])) {
                 $display_query .= $create_query . "\n";
                 $this->_dbi->tryQuery($create_query);
                 $tmp_error_create = $this->_dbi->getError();
@@ -2439,7 +2460,7 @@ class Table
                     $options_array[$existrel_foreign[$master_field_md5]['on_delete']],
                     $options_array[$existrel_foreign[$master_field_md5]['on_update']]
                 );
-                if (! isset($_REQUEST['preview_sql'])) {
+                if (! isset($_POST['preview_sql'])) {
                     $display_query .= $sql_query_recreate . "\n";
                     $this->_dbi->tryQuery($sql_query_recreate);
                 } else {

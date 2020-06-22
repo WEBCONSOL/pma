@@ -152,7 +152,7 @@ class Normalization
             'fields_meta' => null,
             'mimework' => $cfgRelation['mimework'],
             'content_cells' => $contentCells,
-            'change_column' => $_REQUEST['change_column'],
+            'change_column' => $_POST['change_column'],
             'is_virtual_columns_supported' => Util::isVirtualColumnsSupported(),
             'browse_mime' => $GLOBALS['cfg']['BrowseMIME'],
             'server_type' => Util::getServerType(),
@@ -1041,7 +1041,7 @@ class Normalization
         $res = $this->dbi->fetchResult($query, null, null);
         foreach ($columns as $column) {
             if ($column) {
-                $result[$column] = $res[0][$column . '_cnt'];
+                $result[$column] = isset($res[0][$column . '_cnt']) ? $res[0][$column . '_cnt'] : null;
             }
         }
         return $result;

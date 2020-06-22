@@ -741,7 +741,7 @@ class Index
                 $r .= '" ' . $row_span . '>'
                    . '    <a class="';
                 $r .= 'ajax';
-                $r .= '" href="tbl_indexes.php' . Url::getCommon($this_params)
+                $r .= '" href="tbl_indexes.php" data-post="' . Url::getCommon($this_params, '')
                    . '">' . Util::getIcon('b_edit', __('Edit')) . '</a>'
                    . '</td>' . "\n";
                 $this_params = $GLOBALS['url_params'];
@@ -751,7 +751,7 @@ class Index
                         . ' DROP PRIMARY KEY;';
                     $this_params['message_to_show']
                         = __('The primary key has been dropped.');
-                    $js_msg = Sanitize::jsFormat($this_params['sql_query']);
+                    $js_msg = Sanitize::jsFormat($this_params['sql_query'], false);
                 } else {
                     $this_params['sql_query'] = 'ALTER TABLE '
                         . Util::backquote($table) . ' DROP INDEX '
@@ -759,7 +759,7 @@ class Index
                     $this_params['message_to_show'] = sprintf(
                         __('Index %s has been dropped.'), htmlspecialchars($index->getName())
                     );
-                    $js_msg = Sanitize::jsFormat($this_params['sql_query']);
+                    $js_msg = Sanitize::jsFormat($this_params['sql_query'], false);
                 }
 
                 $r .= '<td ' . $row_span . ' class="print_ignore">';

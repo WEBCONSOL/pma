@@ -24,6 +24,15 @@ require_once 'libraries/common.inc.php';
  */
 require_once 'libraries/check_user_privileges.inc.php';
 
+// lower_case_table_names=1 `DB` becomes `db`
+$lowerCaseNames = $GLOBALS['dbi']->getLowerCaseNames() === '1';
+
+if ($lowerCaseNames) {
+    $GLOBALS['table'] = mb_strtolower(
+        $GLOBALS['table']
+    );
+}
+
 $pma_table = new Table($GLOBALS['table'], $GLOBALS['db']);
 
 /**
@@ -100,7 +109,7 @@ $operations = new Operations();
 /**
  * If the table has to be moved to some other database
  */
-if (isset($_REQUEST['submit_move']) || isset($_REQUEST['submit_copy'])) {
+if (isset($_POST['submit_move']) || isset($_POST['submit_copy'])) {
     //$_message = '';
     $operations->moveOrCopyTable($db, $table);
     // This was ended in an Ajax call
@@ -109,28 +118,34 @@ if (isset($_REQUEST['submit_move']) || isset($_REQUEST['submit_copy'])) {
 /**
  * If the table has to be maintained
  */
-if (isset($_REQUEST['table_maintenance'])) {
+if (isset($_POST['table_maintenance'])) {
     include_once 'sql.php';
     unset($result);
 }
 /**
  * Updates table comment, type and options if required
  */
-if (isset($_REQUEST['submitoptions'])) {
+if (isset($_POST['submitoptions'])) {
     $_message = '';
     $warning_messages = array();
 
-    if (isset($_REQUEST['new_name'])) {
+    if (isset($_POST['new_name'])) {
+        // lower_case_table_names=1 `DB` becomes `db`
+        if ($lowerCaseNames) {
+            $_POST['new_name'] = mb_strtolower(
+                $_POST['new_name']
+            );
+        }
         // Get original names before rename operation
         $oldTable = $pma_table->getName();
         $oldDb = $pma_table->getDbName();
 
-        if ($pma_table->rename($_REQUEST['new_name'])) {
-            if (isset($_REQUEST['adjust_privileges'])
-                && ! empty($_REQUEST['adjust_privileges'])
+        if ($pma_table->rename($_POST['new_name'])) {
+            if (isset($_POST['adjust_privileges'])
+                && ! empty($_POST['adjust_privileges'])
             ) {
                 $operations->adjustPrivilegesRenameOrMoveTable(
-                    $oldDb, $oldTable, $_REQUEST['db'], $_REQUEST['new_name']
+                    $oldDb, $oldTable, $_POST['db'], $_POST['new_name']
                 );
             }
 
@@ -148,10 +163,10 @@ if (isset($_REQUEST['submitoptions'])) {
         }
     }
 
-    if (! empty($_REQUEST['new_tbl_storage_engine'])
-        && mb_strtoupper($_REQUEST['new_tbl_storage_engine']) !== $tbl_storage_engine
+    if (! empty($_POST['new_tbl_storage_engine'])
+        && mb_strtoupper($_POST['new_tbl_storage_engine']) !== $tbl_storage_engine
     ) {
-        $new_tbl_storage_engine = mb_strtoupper($_REQUEST['new_tbl_storage_engine']);
+        $new_tbl_storage_engine = mb_strtoupper($_POST['new_tbl_storage_engine']);
 
         if ($pma_table->isEngine('ARIA')) {
             $create_options['transactional'] = (isset($create_options['transactional']) && $create_options['transactional'] == '0')
@@ -190,28 +205,40 @@ if (isset($_REQUEST['submitoptions'])) {
         $warning_messages = $operations->getWarningMessagesArray();
     }
 
-    if (isset($_REQUEST['tbl_collation'])
-        && ! empty($_REQUEST['tbl_collation'])
-        && isset($_REQUEST['change_all_collations'])
-        && ! empty($_REQUEST['change_all_collations'])
+    if (isset($_POST['tbl_collation'])
+        && ! empty($_POST['tbl_collation'])
+        && isset($_POST['change_all_collations'])
+        && ! empty($_POST['change_all_collations'])
     ) {
         $operations->changeAllColumnsCollation(
-            $GLOBALS['db'], $GLOBALS['table'], $_REQUEST['tbl_collation']
+            $GLOBALS['db'], $GLOBALS['table'], $_POST['tbl_collation']
         );
+    }
+
+    if (isset($_POST['tbl_collation']) && empty($_POST['tbl_collation'])) {
+        $response = Response::getInstance();
+        if ($response->isAjax()) {
+            $response->setRequestStatus(false);
+            $response->addJSON(
+                'message',
+                Message::error(__('No collation provided.'))
+            );
+            exit;
+        }
     }
 }
 /**
  * Reordering the table has been requested by the user
  */
-if (isset($_REQUEST['submitorderby']) && ! empty($_REQUEST['order_field'])) {
+if (isset($_POST['submitorderby']) && ! empty($_POST['order_field'])) {
     list($sql_query, $result) = $operations->getQueryAndResultForReorderingTable();
 } // end if
 
 /**
  * A partition operation has been requested by the user
  */
-if (isset($_REQUEST['submit_partition'])
-    && ! empty($_REQUEST['partition_operation'])
+if (isset($_POST['submit_partition'])
+    && ! empty($_POST['partition_operation'])
 ) {
     list($sql_query, $result) = $operations->getQueryAndResultForPartition();
 } // end if
@@ -454,12 +481,8 @@ if (Partition::havePartitioning()) {
 unset($partition_names);
 
 // Referential integrity check
-// The Referential integrity check was intended for the non-InnoDB
-// tables for which the relations are defined in pmadb
-// so I assume that if the current table is InnoDB, I don't display
-// this choice (InnoDB maintains integrity by itself)
 
-if ($cfgRelation['relwork'] && ! $pma_table->isEngine("INNODB")) {
+if ($cfgRelation['relwork']) {
     $GLOBALS['dbi']->selectDb($GLOBALS['db']);
     $foreign = $relation->getForeigners($GLOBALS['db'], $GLOBALS['table'], '', 'internal');
 

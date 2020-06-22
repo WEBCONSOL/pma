@@ -19,6 +19,7 @@ use PhpMyAdmin\Server\Select;
 use PhpMyAdmin\ThemeManager;
 use PhpMyAdmin\Url;
 use PhpMyAdmin\Util;
+use PhpMyAdmin\UserPreferences;
 
 /**
  * Gets some core libraries and displays a top message if required
@@ -82,6 +83,12 @@ if (isset($_POST['set_theme'])) {
     $tmanager = ThemeManager::getInstance();
     $tmanager->setActiveTheme($_POST['set_theme']);
     $tmanager->setThemeCookie();
+
+    $userPreferences = new UserPreferences();
+    $prefs = $userPreferences->load();
+    $prefs["config_data"]["ThemeDefault"] = $_POST['set_theme'];
+    $userPreferences->save($prefs["config_data"]);
+
     header('Location: index.php' . Url::getCommonRaw());
     exit();
 }
@@ -127,10 +134,12 @@ if ($response->isAjax() && ! empty($_REQUEST['recent_table'])) {
 }
 
 if ($GLOBALS['PMA_Config']->isGitRevision()) {
+    // If ajax request to get revision
     if (isset($_REQUEST['git_revision']) && $response->isAjax()) {
         GitRevision::display();
         exit;
     }
+    // Else show empty html
     echo '<div id="is_git_revision"></div>';
 }
 
@@ -360,12 +369,14 @@ if ($server > 0 && $GLOBALS['cfg']['ShowServerInfo']) {
     echo '    <li id="li_select_mysql_charset">';
     echo '        ' , __('Server charset:') , ' '
        . '        <span lang="en" dir="ltr">';
-    $unicode = Charsets::$mysql_charset_map['utf-8'];
+
+    $charset = Charsets::getServerCharset($GLOBALS['dbi']);
     $charsets = Charsets::getMySQLCharsetsDescriptions(
         $GLOBALS['dbi'],
         $GLOBALS['cfg']['Server']['DisableIS']
     );
-    echo '           ' , $charsets[$unicode], ' (' . $unicode, ')';
+
+    echo '           ' , (isset($charsets[$charset]) ? $charsets[$charset] : '') , ' (' . $charset, ')';
     echo '        </span>'
        . '    </li>'
        . '  </ul>'
@@ -614,7 +625,7 @@ if ($server > 0) {
                 );
         }
         $msg = Message::notice($msg_text);
-        $msg->addParamHtml('<a href="./chk_rel.php' . $common_url_query . '">');
+        $msg->addParamHtml('<a href="./chk_rel.php" data-post="' . $common_url_query . '">');
         $msg->addParamHtml('</a>');
         /* Show error if user has configured something, notice elsewhere */
         if (!empty($cfg['Servers'][$server]['pmadb'])) {

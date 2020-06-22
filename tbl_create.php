@@ -61,11 +61,20 @@ $action = 'tbl_create.php';
 /**
  * The form used to define the structure of the table has been submitted
  */
-if (isset($_REQUEST['do_save_data'])) {
+if (isset($_POST['do_save_data'])) {
+    // lower_case_table_names=1 `DB` becomes `db`
+    if ($GLOBALS['dbi']->getLowerCaseNames() === '1') {
+        $db = mb_strtolower(
+            $db
+        );
+        $table = mb_strtolower(
+            $table
+        );
+    }
     $sql_query = $createAddField->getTableCreationQuery($db, $table);
 
     // If there is a request for SQL previewing.
-    if (isset($_REQUEST['preview_sql'])) {
+    if (isset($_POST['preview_sql'])) {
         Core::previewSQL($sql_query);
     }
     // Executes the query
@@ -73,21 +82,21 @@ if (isset($_REQUEST['do_save_data'])) {
 
     if ($result) {
         // Update comment table for mime types [MIME]
-        if (isset($_REQUEST['field_mimetype'])
-            && is_array($_REQUEST['field_mimetype'])
+        if (isset($_POST['field_mimetype'])
+            && is_array($_POST['field_mimetype'])
             && $cfg['BrowseMIME']
         ) {
-            foreach ($_REQUEST['field_mimetype'] as $fieldindex => $mimetype) {
-                if (isset($_REQUEST['field_name'][$fieldindex])
-                    && strlen($_REQUEST['field_name'][$fieldindex]) > 0
+            foreach ($_POST['field_mimetype'] as $fieldindex => $mimetype) {
+                if (isset($_POST['field_name'][$fieldindex])
+                    && strlen($_POST['field_name'][$fieldindex]) > 0
                 ) {
                     Transformations::setMIME(
                         $db, $table,
-                        $_REQUEST['field_name'][$fieldindex], $mimetype,
-                        $_REQUEST['field_transformation'][$fieldindex],
-                        $_REQUEST['field_transformation_options'][$fieldindex],
-                        $_REQUEST['field_input_transformation'][$fieldindex],
-                        $_REQUEST['field_input_transformation_options'][$fieldindex]
+                        $_POST['field_name'][$fieldindex], $mimetype,
+                        $_POST['field_transformation'][$fieldindex],
+                        $_POST['field_transformation_options'][$fieldindex],
+                        $_POST['field_input_transformation'][$fieldindex],
+                        $_POST['field_input_transformation_options'][$fieldindex]
                     );
                 }
             }

@@ -286,7 +286,7 @@ class Import
         $import_run_buffer = self::runQueryPost($import_run_buffer, $sql, $full);
 
         // In case of ROLLBACK, notify the user.
-        if (isset($_REQUEST['rollback_query'])) {
+        if (isset($_POST['rollback_query'])) {
             $msg .= __('[ROLLBACK occurred.]');
         }
     }
@@ -810,8 +810,12 @@ class Import
             return self::DECIMAL;
         }
 
-        if (abs($cell) > 2147483647) {
+        if (abs((int) $cell) > 2147483647) {
             return self::BIGINT;
+        }
+
+        if ($cell !== (string)(int)$cell) {
+            return self::VARCHAR;
         }
 
         return self::INT;
@@ -1343,7 +1347,7 @@ class Import
         $response = Response::getInstance();
         $error = false;
         $error_msg = __('Only single-table UPDATE and DELETE queries can be simulated.');
-        $sql_delimiter = $_REQUEST['sql_delimiter'];
+        $sql_delimiter = $_POST['sql_delimiter'];
         $sql_data = array();
         $queries = explode($sql_delimiter, $GLOBALS['sql_query']);
         foreach ($queries as $sql_query) {
@@ -1565,7 +1569,7 @@ class Import
      */
     public static function handleRollbackRequest($sql_query)
     {
-        $sql_delimiter = $_REQUEST['sql_delimiter'];
+        $sql_delimiter = $_POST['sql_delimiter'];
         $queries = explode($sql_delimiter, $sql_query);
         $error = false;
         $error_msg = __(
@@ -1590,7 +1594,7 @@ class Import
         }
 
         if ($error) {
-            unset($_REQUEST['rollback_query']);
+            unset($_POST['rollback_query']);
             $response = Response::getInstance();
             $message = Message::rawError($error);
             $response->addJSON('message', $message);
@@ -1613,7 +1617,7 @@ class Import
         $parser = new Parser($sql_query);
 
         if (empty($parser->statements[0])) {
-            return false;
+            return true;
         }
 
         $statement = $parser->statements[0];
